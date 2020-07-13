@@ -340,3 +340,136 @@ corrplot(cor(df_churn %>% select_if(is.numeric)))
 ```
 
 ![](tidymodels_exploration_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+# Feature Engineering
+
+An important part of the model building process is to try and create new
+predictors which will improve the accuracy of the model. The information
+gained from the exploratory analysis, provides a couple of ideas as to
+which variables can be generated.
+
+### Surname
+
+Given that the surname has circa 3k unique entries, it is unlikely that
+the variable will be entered into the model. Instead some of the
+information embedded will be used to generate new variables. The first
+variable which will be created is a count of the total number of family
+members with the same surname. As seen in the section above this
+appeared to show a negatively correlated relationship.
+
+``` r
+# Create a variable of total family size
+df_churn <-
+  df_churn %>%
+  left_join(df_churn %>%
+              group_by(surname, exited) %>%
+              count() %>%
+              spread(exited, n) %>%
+              replace_na(list(Churn = 0, Remain = 0)) %>%
+              mutate(total_family = Churn + Remain) %>%
+              select(surname, total_family),
+            by = "surname")
+```
+
+Without commiting to thorough text analytics, there might be some value
+in seeing if the attributes of a customer’s name has a relationship with
+whether they churn. A simple approach is taken here, firstly 26 new
+columns are created to capture each letter of the alphabet a:z. Then for
+each surname those columns are populated with the counts of times the
+letter appeared in the customer’s name. The final step is to try and
+reduce the new 26 columns down, a Principle Component Analysis (PCA) was
+conducted to achieve this. The output below shows that the first 10
+principle components represent 75% of the variation in the letters
+associated with customer’s names.
+
+``` r
+#Create a df with 26 columns
+df_alphabet <-  
+  cbind(
+        df_churn %>%
+          select(surname),
+        matrix(0, nrow = nrow(df_churn), ncol = 26) %>%
+        as.data.frame() %>%
+        set_names(., c("a", "b", "c", "d", "e", "f", "g", "h", 
+                       "i", "j", "k", "l", "m", "n", "o", "p", 
+                       "q", "r", "s", "t", "u", "v", "w", "x", 
+                       "y", "z"))
+        )
+
+# Fill df with counts of letters in customer's name
+df_alphabet[2:ncol(df_alphabet)] <-
+  sapply(names(df_alphabet[2:ncol(df_alphabet)]), function(x) {str_count(df_alphabet[,1], x)})
+  
+
+# Create PCA analysis and plot
+pca <- prcomp(df_alphabet[2:ncol(df_alphabet)])
+summary(pca) 
+```
+
+    ## Importance of components:
+    ##                           PC1    PC2    PC3     PC4     PC5     PC6     PC7
+    ## Standard deviation     0.7707 0.7152 0.6944 0.66855 0.62850 0.58522 0.56174
+    ## Proportion of Variance 0.1188 0.1023 0.0965 0.08943 0.07904 0.06853 0.06314
+    ## Cumulative Proportion  0.1188 0.2212 0.3177 0.40713 0.48617 0.55470 0.61784
+    ##                            PC8     PC9    PC10    PC11    PC12    PC13    PC14
+    ## Standard deviation     0.50341 0.46637 0.44802 0.41093 0.39631 0.36110 0.34823
+    ## Proportion of Variance 0.05071 0.04352 0.04016 0.03379 0.03143 0.02609 0.02426
+    ## Cumulative Proportion  0.66855 0.71207 0.75223 0.78602 0.81745 0.84354 0.86781
+    ##                           PC15   PC16    PC17    PC18    PC19    PC20    PC21
+    ## Standard deviation     0.33924 0.3209 0.29870 0.28208 0.26311 0.25269 0.22539
+    ## Proportion of Variance 0.02303 0.0206 0.01785 0.01592 0.01385 0.01278 0.01016
+    ## Cumulative Proportion  0.89083 0.9114 0.92929 0.94521 0.95906 0.97184 0.98201
+    ##                           PC22    PC23    PC24    PC25    PC26
+    ## Standard deviation     0.19837 0.18813 0.08883 0.08001 0.02989
+    ## Proportion of Variance 0.00787 0.00708 0.00158 0.00128 0.00018
+    ## Cumulative Proportion  0.98988 0.99696 0.99854 0.99982 1.00000
+
+The plot below shows the distribution of churn and remain for the first
+10 principle components just created. There doesn’t appear to be much
+variation based on the name based components, however this will be
+explored more rigourously during feature selection.
+
+``` r
+# Visualise relationship with churn
+cbind(df_churn %>% select(exited), pca$x[,1:10]) %>%
+  gather(-exited, key = "var", value = "value") %>%
+  mutate(var = as.numeric(substr(var, 3,4))) %>%
+  ggplot(aes(x = exited, y = value, fill = exited)) +
+    geom_boxplot() +
+    facet_grid(. ~ var) +
+    theme(axis.text.x = element_text(angle = 90),
+          legend.position = "none",
+          plot.title = element_text(hjust = 0.5)) +
+    ggtitle("Surname PCA and Churn/ Remain")
+```
+
+![](tidymodels_exploration_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+
+``` r
+# Update churn dataframe
+df_churn <-
+  cbind(df_churn,
+        pca$x[,1:10]) %>%
+  rename_at(vars(starts_with('PC')), funs(paste0('Name', .)))
+
+rm(df_alphabet, pca) # reduce memory size
+```
+
+#### Tenure
+
+The exploratory analysis revealed that the distribution of tenure for
+customers who left the bank was a lot wider than those who remained. It
+suggested that maybe newer and longer standing customers were at higher
+risk of churn, while medium term customers had a lower likelihood. As
+such a new variable will be created which splits tenure into less than 3
+being a new cusotmer and being longer than 7 being older customer.
+
+``` r
+# Create a variable
+df_churn <-
+  df_churn %>%
+    mutate(tenure_fct = factor(case_when(tenure <= 3 ~ "New",
+                                         tenure >= 7 ~ "Long",
+                                         TRUE ~ "Medium"),
+                               level = c("New", "Medium", "Long")))
+```
