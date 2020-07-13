@@ -90,3 +90,14 @@ library(data.table) # Data handling
 
 
 # Data loading
+
+To kick start this project, the fread function from the data.table package is used to load the data into memory.
+
+```{r warning = FALSE, message = FALSE}
+
+# Load data
+df_churn <- 
+  data.table::fread("C:/Users/Anthony/Documents/Git/Project Portfolio/tidymodels_exploration/Churn_Modelling.csv")
+```
+
+
