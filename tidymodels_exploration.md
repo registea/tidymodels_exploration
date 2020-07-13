@@ -279,3 +279,64 @@ grid.arrange(
 ```
 
 ![](tidymodels_exploration_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+## Exploring Numerical Variables
+
+The plot looks at the relationship between each numeric variable and
+churn. Two of the variables ‘hascrcard’ and ‘isactivemember’ are binary
+variables and should be visualised in a different form. The remaining
+variables can be summarised as:
+
+  - Age: There appears to be a relationship that customers that churn
+    are older on average than customers that don’t
+  - Balance: The average balance of customers who churn and remain are
+    similar. However, those who churn tend to have a higher balance
+  - Credit score: There doesn’t appear to be much of a difference with
+    regards to creditscore
+  - Estimated salary: Again there doesn’t appear to be much of a
+    difference with regard to salary
+  - Number of products: On average customers that remain have more than
+    one product, while customers that leave have only one
+  - Tenure: There is a wider distribution of tenure within customers
+    that churn, it appears that newer and older customers could have a
+    higher likelihood of churning
+
+<!-- end list -->
+
+``` r
+# Relationship with Churn and Numerical variables
+df_churn %>%
+  {bind_cols(select_if(., is.numeric),
+             select_at(., "exited"))
+  } %>%
+  gather(-exited, key = "var", value = "value") %>%
+  ggplot(aes(x = exited, y = value, fill = exited)) +
+    geom_boxplot() +
+    theme(legend.position = "none") + 
+    facet_wrap(~ var, scales = "free")  +
+    ggtitle("Numerical Variable Relationship with Churn")
+```
+
+<img src="tidymodels_exploration_files/figure-gfm/unnamed-chunk-8-1.png" style="display: block; margin: auto;" />
+
+As mentioned above the ‘credit card’ and ‘Active member’ variables
+shouldn’t be visualised using a boxplot. To generate the following plot,
+the variables are firstly converted to factors and then the plot
+explores whether there is a relationship with churn. Having a credit
+card doesn’t appear to impact the customers likelihood to churn.
+Alternatively, whether the customer is considered active, definately has
+a relationship, ‘Active’ customers have much lower liklihood of
+churning.
+
+<img src="tidymodels_exploration_files/figure-gfm/unnamed-chunk-9-1.png" style="display: block; margin: auto;" />
+
+The plot below indicates that the numerical predictors are not
+particularly correlated, so no actions are required to address
+multicollinariety.
+
+``` r
+# Create a variable of total family size
+corrplot(cor(df_churn %>% select_if(is.numeric)))
+```
+
+![](tidymodels_exploration_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
